@@ -40,10 +40,6 @@ del chunk_list
 df_ts
 
 # %%
-
-
-
-# %%
 # Reference: https://pandas.pydata.org/docs/reference/api/pandas.to_datetime.html
 
 # changing hour_ts to datetime for calculation
@@ -74,30 +70,12 @@ df_ts["relative_hour"].describe()
 # %%
 # keeping only data within observation window [-3h to +24h]
 
-df_ts_window = df_ts[(df_ts["relative_hour"] >= -3) &(df_ts["relative_hour"] <= 24)].copy()
+df_ts_window = df_ts[(df_ts["relative_hour"] >= -3) & (df_ts["relative_hour"] <= 24)].copy()
 
 #checking before and after filtering by observation window
 print(f"Before filter : {len(df_ts):,} rows")
 print(f"After filter  : {len(df_ts_window):,} rows")
 print(f"Unique stays  : {df_ts_window['stay_id'].nunique():,}")
-
-# %% [markdown]
-# # calculating measurement coverage for each variable
-# # to determine which variables are dense vs sparse
-# # Reference: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.describe.html
-# 
-# all_vars = [col for col in df_ts_window.columns
-#             if col not in ["stay_id", "relative_hour"]]
-# 
-# coverage = {}
-# for var in all_vars:
-#     coverage[var] = df_ts_window[var].notna().mean() * 100
-# 
-# df_coverage = pd.DataFrame.from_dict(
-#     coverage, orient="index", columns=["coverage_%"]
-# ).sort_values("coverage_%", ascending=False)
-# 
-# print(df_coverage)
 
 # %%
 ### https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.isnull.html
@@ -129,52 +107,6 @@ SPARSE_VARS = ["gcs", "sofa_cns", "temp", "sofa_renal", "sodium", "vasopressor_d
 df_ts_window = df_ts_window.drop(columns=["spo2", "inr"], errors="ignore")
 
 df_ts_window.columns
-
-# %% [markdown]
-# # classifying variables based on coverage
-# # dense  = coverage > 50% (measured continuously)
-# # sparse = coverage <= 50% (measured intermittently)
-# # drop   = coverage = 0% (completely missing, e.g. spo2, inr)
-# # Reference: eda_dense_sparse.py from group pipeline
-# 
-# DENSE_VARS = df_coverage[df_coverage["coverage_%"] > 50].index.tolist()
-# SPARSE_VARS = df_coverage[
-#     (df_coverage["coverage_%"] > 0) &
-#     (df_coverage["coverage_%"] <= 50)
-# ].index.tolist()
-# DROP_VARS = df_coverage[df_coverage["coverage_%"] == 0].index.tolist()
-# 
-# print(f"Dense  ({len(DENSE_VARS)})  : {DENSE_VARS}")
-# print(f"Sparse ({len(SPARSE_VARS)}) : {SPARSE_VARS}")
-# print(f"Drop   ({len(DROP_VARS)})   : {DROP_VARS}")
-
-# %% [markdown]
-# # aggregating dense variables using 7 statistics
-# # dense variables are measured frequently enough to estimate trend (slope)
-# # Reference: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.GroupBy.agg.html
-# # Reference: https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html
-# 
-# def slope(series):
-#     valid = series.dropna()
-#     if len(valid) < 2:
-#         return np.nan
-#     x = np.arange(len(valid))
-#     return np.polyfit(x, valid.values, 1)[0]
-# 
-# dense_frames = []
-# for var in DENSE_VARS:
-#     if var not in df_ts_window.columns:
-#         continue
-#     grp = df_ts_window.groupby("stay_id")[var]
-#     agg = grp.agg(mean="mean", min="min", max="max",
-#                   std="std", last="last", count="count")
-#     agg["slope"] = grp.apply(slope)
-#     agg.columns = [f"{var}_{stat}" for stat in agg.columns]
-#     dense_frames.append(agg)
-#     print(f"Done: {var}")
-# 
-# df_dense_agg = pd.concat(dense_frames, axis=1).reset_index()
-# print(f"\nShape: {df_dense_agg.shape}")
 
 # %%
 # defining slope function to measure variable trend as clinically important
@@ -322,9 +254,6 @@ df_dense_agg.head()
 # %%
 #checking final shape
 df_dense_agg.shape
-
-# %%
-
 
 # %%
 #aggregating sparse variables with 5 statistical features
@@ -648,7 +577,7 @@ sofa_liver_agg = df_ts_window.groupby("stay_id")["sofa_liver"].agg(
 sofa_liver_agg.head()
 
 # %%
-sofa_liver_agg["sofa_liver_measured"]       = (sofa_liver_agg["sofa_liver_count"] > 0).astype(int)
+sofa_liver_agg["sofa_liver_measured"] = (sofa_liver_agg["sofa_liver_count"] > 0).astype(int)
 
 sofa_liver_agg.head()
 
@@ -704,41 +633,6 @@ df_sparse_agg.head()
 
 df_sparse_agg.shape
 
-# %% [markdown]
-# # aggregating sparse variables using 5 statistics only
-# # std and slope excluded because too few measurements to be reliable
-# # Reference: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.GroupBy.agg.html
-# 
-# sparse_frames = []
-# for var in SPARSE_VARS:
-#     if var not in df_ts_window.columns:
-#         continue
-#     grp = df_ts_window.groupby("stay_id")[var]
-#     agg = grp.agg(mean="mean", min="min", max="max",
-#                   last="last", count="count")
-#     agg.columns = [f"{var}_{stat}" for stat in agg.columns]
-#     sparse_frames.append(agg)
-#     print(f"Done: {var}")
-# 
-# df_sparse_agg = pd.concat(sparse_frames, axis=1).reset_index()
-# print(f"\nShape: {df_sparse_agg.shape}")
-
-# %% [markdown]
-# # merging dense and sparse aggregations
-# # adding missingness flags: 1 if variable was ever measured, 0 if not
-# # Reference: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.merge.html
-# 
-# df_ts_agg = df_dense_agg.merge(df_sparse_agg, on="stay_id", how="left")
-# 
-# for var in DENSE_VARS + SPARSE_VARS:
-#     count_col = f"{var}_count"
-#     if count_col in df_ts_agg.columns:
-#         df_ts_agg[f"{var}_measured"] = (df_ts_agg[count_col] > 0).astype(int)
-# 
-# print(f"Final shape: {df_ts_agg.shape}")
-# print(f"Expected from pipeline log: 40,457 rows x 142 columns")
-# df_ts_agg.head()
-
 # %%
 # merging dense and sparse aggregations 
 
@@ -746,66 +640,10 @@ df_ts_agg = df_dense_agg.merge(df_sparse_agg, on="stay_id", how="left")
 
 df_ts_agg
 
-# %% [markdown]
-# # adding missingness flag for each variable
-# # 1 = variable was measured at least once during observation window
-# # 0 = variable was never measured
-# # Reference: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.loc.html
-# 
-# all_vars = DENSE_VARS + SPARSE_VARS
-# 
-# for var in all_vars:
-#     count_col = f"{var}_count"
-#     if count_col in df_ts_agg.columns:
-#         df_ts_agg[f"{var}_measured"] = (df_ts_agg[count_col] > 0).astype(int)
-
-# %% [markdown]
-# # adding missingness flags for each variable
-# # 1 = measured at least once, 0 = never measured
-# # Reference: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.loc.html
-# 
-# 
-# df_ts_agg["rr_measured"]               = (df_ts_agg["rr_count"] > 0).astype(int)
-# df_ts_agg["ventilation_flag_measured"] = (df_ts_agg["ventilation_flag_count"] > 0).astype(int)
-# df_ts_agg["urine_output_measured"]     = (df_ts_agg["urine_output_count"] > 0).astype(int)
-# df_ts_agg["sofa_cardio_measured"]      = (df_ts_agg["sofa_cardio_count"] > 0).astype(int)
-# df_ts_agg["gcs_measured"]              = (df_ts_agg["gcs_count"] > 0).astype(int)
-# df_ts_agg["temp_measured"]             = (df_ts_agg["temp_count"] > 0).astype(int)
-# df_ts_agg["map_measured"]              = (df_ts_agg["map_count"] > 0).astype(int)
-# df_ts_agg["lactate_measured"]          = (df_ts_agg["lactate_count"] > 0).astype(int)
-# df_ts_agg["creatinine_measured"]       = (df_ts_agg["creatinine_count"] > 0).astype(int)
-# df_ts_agg["bilirubin_measured"]        = (df_ts_agg["bilirubin_count"] > 0).astype(int)
-# df_ts_agg["platelets_measured"]        = (df_ts_agg["platelets_count"] > 0).astype(int)
-# df_ts_agg["wbc_measured"]              = (df_ts_agg["wbc_count"] > 0).astype(int)
-# df_ts_agg["sodium_measured"]           = (df_ts_agg["sodium_count"] > 0).astype(int)
-# df_ts_agg["bun_measured"]              = (df_ts_agg["bun_count"] > 0).astype(int)
-# df_ts_agg["vasopressor_dose_measured"] = (df_ts_agg["vasopressor_dose_count"] > 0).astype(int)
-# df_ts_agg["fluid_input_measured"]      = (df_ts_agg["fluid_input_count"] > 0).astype(int)
-# df_ts_agg["sofa_resp_measured"]        = (df_ts_agg["sofa_resp_count"] > 0).astype(int)
-# df_ts_agg["sofa_renal_measured"]       = (df_ts_agg["sofa_renal_count"] > 0).astype(int)
-# df_ts_agg["sofa_liver_measured"]       = (df_ts_agg["sofa_liver_count"] > 0).astype(int)
-# df_ts_agg["sofa_coag_measured"]        = (df_ts_agg["sofa_coag_count"] > 0).astype(int)
-# df_ts_agg["sofa_cns_measured"]         = (df_ts_agg["sofa_cns_count"] > 0).astype(int)
-# 
-# print(f"Final shape: {df_ts_agg.shape}")
-
-# %%
-# checking for duplicate columns
-print([col for col in df_ts_agg.columns if df_ts_agg.columns.tolist().count(col) > 1])
-
-# checking all columns
-print(df_ts_agg.shape)
-print(df_ts_agg.columns.tolist())
-
-# checking sofa_liver coverage
-print(df_ts_window["sofa_liver"].notna().mean() * 100)
-
 # %%
 # exporting time series aggregated features
 # Reference: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_csv.html
 
-df_ts_agg.to_csv("timeseries_agg.csv", index=False)
-
-print(f"Saved: {df_ts_agg.shape[0]:,} rows x {df_ts_agg.shape[1]} columns")
+df_ts_agg.to_csv("cohort_step4.csv", index=False)
 
 
