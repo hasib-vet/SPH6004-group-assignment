@@ -644,6 +644,6 @@ df_ts_agg
 # exporting time series aggregated features
 # Reference: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_csv.html
 
-df_ts_agg.to_csv("cohort_step4.csv", index=False)
+df_ts_agg.to_csv("cohort_step_4.csv", index=False)
 
 
