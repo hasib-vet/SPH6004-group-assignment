@@ -78,7 +78,6 @@ print(f"After filter  : {len(df_ts_window):,} rows")
 print(f"Unique stays  : {df_ts_window['stay_id'].nunique():,}")
 
 # %%
-### https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.isnull.html
 #Determining which variables are dense vs sparse based on coverage
 #checking how often each variable is measured
 
@@ -246,7 +245,7 @@ sofa_cardio_agg["sofa_cardio_measured"] = (sofa_cardio_agg["sofa_cardio_count"] 
 sofa_cardio_agg.head()
 
 # %%
-#all together in one final aggregated dataframe
+#all together in one 
 df_dense_agg = df_dense_agg.merge(sofa_cardio_agg, on="stay_id", how="left")
 
 df_dense_agg.head()
@@ -642,8 +641,13 @@ df_ts_agg
 
 # %%
 # exporting time series aggregated features
-# Reference: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_csv.html
 
 df_ts_agg.to_csv("cohort_step_4.csv", index=False)
+
+# %%
+# saving filtered time series window for step 5
+
+df_ts_window.to_csv("ts_window.csv", index=False)
+
 
 
